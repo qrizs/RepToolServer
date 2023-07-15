@@ -2,25 +2,62 @@ require("edge-js");
 const oledb = require('oledb');
 
 
-const appId = "PrimaryUser";
-const entryKey = "sa";
+class SSASConn {
+    _param = {};
+    _pool;
 
-//const connectionString = `Provider=SQLNCLIRDA11;Data Source=QRIZS-COMPUTER;Persist Security Info=True;Password=${entryKey};User ID=${appId};Initial Catalog=AdventureWorksDW2022`;
-const connectionString = `Provider=MSOLAP;Data Source=QRIZS-COMPUTER;Initial Catalog=AdventureWorksDW2022`;
+    constructor(p_param) {
+        this._param = p_param;
+    }
 
-const conn = oledb.oledbConnection(connectionString);
-//let query = `SELECT NON EMPTY { [Measures].[Unit Cost], [Measures].[Units Balance], [Measures].[Units Out], [Measures].[Units In] } ON COLUMNS, NON EMPTY { ([Dim Date].[Full Date Alternate Key].[Full Date Alternate Key].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM [Adventure Works DW Cube]`;
-query = ` SELECT { [Measures].[Unit Cost] } ON COLUMNS, NON EMPTY { [Dim Date].[Date Key].[Date Key].[20101228] } ON ROWS FROM [Adventure Works DW Cube] WHERE ( [Dim Product].[Color].[Blue] ) `;
-//query = 'select top (10) * from [AdventureWorksDW2022].[dbo].[FactFinance]';
+    get parameters() {
+        return this._param;
+    }
 
+    set parameters(p_param) {
+        this._param = p_param;
+    }
 
-conn.query(query)
-    .then(result =>{
-        result.result[0].forEach(e => {
-            console.log(e);
-        })
-        //console.log(result.result);
-    })
-    .catch(err => {
-        console.log(err);
-    });
+    setParameter(p_key, p_value) {
+        this._param[p_key] = p_value;
+    }
+
+    openConnection() {
+        if (this._param.database && this._param.server) {
+            const connectionString = `Provider=MSOLAP;Data Source=${this._param.server};Initial Catalog=${this._param.database}`;
+            _pool = oledb.oledbConnection(connectionString);
+            return true;    
+        }
+        else {
+            let error = (this._param.server ? "" : "Please indicate the server. ") & (this._param.database ? "" : "Please indicate the database.")
+            return "Please indicate the server or database."
+        }
+    }
+
+    closeConnection(p_needsDestroy) {
+        return null; //not used
+    }
+
+    fetchTableValue(p_query, p_callback, p_manual = true) {
+        this._pool.query(p_query)
+            .then(result => {
+                p_callback({
+                    data: result.result[0],
+                    status: "Success",
+                    query: p_query
+                });
+            })
+            .catch(err => {
+                p_callback({
+                    data: {},
+                    status: "Error",
+                    error: err.toString()
+                });
+            });
+    }
+
+}
+
+module.exports = {
+    SSASConn
+}

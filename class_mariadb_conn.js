@@ -7,45 +7,70 @@ class MariaDBConn {
 
     constructor(p_param) {
         this._param = p_param;
-        this._pool = mariadb.createPool(this._param);
     }
 
     get parameters() {
         return this._param;
     }
 
+    set parameters(p_param) {
+        this._param = p_param;
+    }
+
+    setParameter(p_key, p_value) {
+        this._param[p_key] = p_value;
+    }
+
+    clone() {
+        return new MariaDBConn(this._param);
+    }
+
     openConnection() {
-        this._pool.getConnection((err, conn) => {
-            if (err) {
-                this._pool = mariadb.createPool(this._param);
-            }
-        });
+        console.log("Running openConnection.");
+        try {
+            this._pool = mariadb.createPool(this._param);
+            return true;
+        }
+        catch (error) {
+            return "Error on creating a pool. " & error.toString();
+        }
     };    
 
     closeConnection(p_needsDestroy) {
-        if (this._pool != null) {
-            if (!this._pool.closed) {
-                if (p_needsDestroy) {
-                    this._pool.destroy();
+        console.log("Running closeConnection.");
+        try{
+            if (this._pool != null) {
+                if (!this._pool.closed) {
+                    if (p_needsDestroy) {
+                        console.log("Destroy pool.");
+                        this._pool.destroy();
+                    }
+                    else {
+                        console.log("End pool.");
+                        this._pool.end();
+                    }
                 }
-                else {
-                    this._pool.end();
-                }
-            }
-        }   
+            }   
+            return true;    
+        }
+        catch (error) {
+            return "Error closing the pool. " & error.toString();
+        }
     };
 
-    fetchTableValue(p_query, p_callback) {
+    fetchTableValue(p_query, p_callback, p_manual = true) {
         console.log("SQL POST STARTS!!!");
         const data = [];
 
         //const pool = openConnection();
         try {
+            console.log("SQL POOL OPENING");
+            if (p_manual) {
+                this.openConnection();
+            }
             this._pool.getConnection((err, connection) => {
                 if (err) {
-                    console.log("SQL couldn't connect to the database!");
-                    openConnection();
-                    fetchTableValue(p_query, p_callback);
+                    console.log(`SQL trying to connect to the database ${this._param.database}!`);
                 }
             })
             .then(conn => {
@@ -61,21 +86,46 @@ class MariaDBConn {
                         conn.release();
                         //this._pool.release();
                         //conn.end();
-                        p_callback(data);
+                        //console.log('data',data);
+                        p_callback({
+                            data:data,
+                            status: "Success",
+                            query: p_query
+                        });
                         //closeConnection();
                         //pool.end();
+                        console.log("SQL POOL CLOSING");
+                        if (p_manual) {
+                            this.closeConnection(false);
+                        }
                     })
                     .catch(err => {
                         console.log("SQL EXECUTE QUERY ERROR!!!", err);
                         conn.release();
                         //this._pool.release();
                         //conn.destroy();
-                        //closeConnection();
+                        this.closeConnection(false);
+                        p_callback({
+                            data: {},
+                            status: "Error",
+                            error: err.toString()
+                        });
                     });
             });
+
         }
         catch(error) {
-            console.log("SQL FULL ERROR!!!", error);
+            console.log("SQL FULL ERROR!!!");
+            console.log('pool', this._pool);
+            if (this._pool) {
+                if (p_manual) {
+                    this.closeConnection(false);
+                }
+            }
+            p_callback({
+                data: {},
+                error: error.toString()
+            });
         }
     
     };
